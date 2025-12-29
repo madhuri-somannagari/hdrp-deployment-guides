@@ -33,12 +33,12 @@ Developer Pushes Code → GitHub Actions Workflow (.github/workflows/deploy.yml)
 1. Developer pushes code to main or master.
 2. GitHub Actions picks up the push via self-hosted runner.
 3. deploy.sh is triggered by workflow and performs:
-     - Create timestamped directory in /home/ubuntu/releases/<timestamp>
-     - Copy source code from /home/ubuntu/git-source (not directly from .git)
+     - Create timestamped directory in /srv/hdrp-staging/releases/<timestamp>
+     - Copy source code from /srv/hdrp-staging/releases/release_timestamp (not directly from .git)
      - Set up or reuse shared Python virtual environment
      - Install dependencies if requirements.txt changed
      - Apply Django database migrations
-     - Copy .env file and link latest release with: `ln -sfn /home/ubuntu/releases/<timestamp> /home/ubuntu/current`
+     - Copy .env file and link latest release with: `ln -sfn /srv/hdrp-staging/releases/<timestamp> /srv/hdrp-satging/current`
      - Restart services (Gunicorn, Celery, etc.)
 4. If deployment fails:
      - rollback_latest.sh is triggered
@@ -67,7 +67,7 @@ Project Structure:
 ### Automated deployment process
 ##### Scripts - Create an automated deployment and rollback scripts.
 ***deploy.sh***: To automate the application deployment process with zero downtime.
-Location: deploy.sh: `/srv/run/deploy.sh`
+Location: deploy.sh: `/srv/hdrp-satging/run/deploy.sh`
 ```script.sh
 
 #!/bin/bash
@@ -339,7 +339,7 @@ exit 0
 ```
 
 #### rollback_latest.sh - Reverts the symlink to the previous stable release if something fails.
-location: : /run/run/rollback_latest.sh
+location: : /srv/hdrp-staging/run/rollback_latest.sh
 ```
 #!/bin/bash
 set -euo pipefail
@@ -427,7 +427,7 @@ rollback_latest.sh	|Handles rollback to last stable release	|/home/ubuntu/rollba
 ### Permissions:
 ``` bash
 chmod +x /srv/hdrp-staging/run/deploy.sh
-chmod +x /home/hdrp-staging/run/rollback_latest.sh
+chmod +x /srv/hdrp-staging/run/rollback_latest.sh
 ```
 
 ### Deployment Strategy 
@@ -461,16 +461,16 @@ RELEASE_DIR="$RELEASES_DIR/$TIMESTAMP"
 ln -sfn "$RELEASE_DIR" /srv/hdrp-staging/current
 ```
 - **Original Git Repository**:  
-  `/home/hdrp-staging/releases/release_timestamp`  
+  `/srv/hdrp-staging/releases/release_timestamp`  
   Contains the cloned GitHub repo (with `.git/`).
 - **Timestamped Release Directories**:  
-  `/home/hdrp-staging/releases/<timestamp>`  
+  `/srv/hdrp-staging/releases/<timestamp>`  
   Each deployment creates a new folder named by timestamp (e.g., `20250611111202`), created via `rsync` from the Git repo.
 - **Active Symlink Directory**:  
-  `/home/hdiplatform/Hiringdog-backend`  
+  `/srv/hdrp-staging/current`  
   This is a symbolic link that always points to the **currently active release** of the application.
   ```bash
-  ln -sfn "$RELEASE_DIR" /home/hdiplatform/Hiringdog-backend
+  ln -sfn "$RELEASE_DIR" /srv/hdrp-staging/current
   ```
 This ensures minimal disruption and safer, atomic deployments.
 
@@ -564,8 +564,8 @@ github-runner ALL=(ALL) NOPASSWD: /home/github-runner/actions-runner/svc.sh, \
                                 /bin/systemctl start actions.runner*, \
                                 /bin/systemctl stop actions.runner*, \
                                 /bin/systemctl status actions.runner*
-github-runner ALL=(ubuntu) NOPASSWD: /home/hdiplatform/rollback_latest.sh
-github-runner ALL=(ubuntu) NOPASSWD: /home/hdiplatform/deploy.sh
+github-runner ALL=(ubuntu) NOPASSWD: /srv/hdrp-staging/run/rollback_latest.sh
+github-runner ALL=(ubuntu) NOPASSWD: /srv/hdrp-staging/run//deploy.sh
 ```
 
 #### Create the following workflow file: file_path:`.github/workflows/staging-deploy.yml`
@@ -574,7 +574,7 @@ name: Deploy to VM via Self-hosted Runner
 
 on:
   push:
-    branches: [staging-production]
+    branches: [master]
 
 jobs:
   deploy:
@@ -585,13 +585,13 @@ jobs:
 
       - name: Run deployment script on VM
         run: |
-          sudo -u hdiplatform /home/hdiplatform/deploy.sh
+          sudo -u ubuntu /srv/hdrp-staging/run/deploy.sh
 
       - name: Rollback if Deployment Fails
         if: failure()
         run: |
           echo "Deployment failed. Rolling back..."
-          sudo -u hdiplatform /home/hdiplatform/rollback_latest.sh
+          sudo -u ubuntu /srv/hdrp-staging/run/rollback_latest.sh
 
       - name: Check service status
         run: |
